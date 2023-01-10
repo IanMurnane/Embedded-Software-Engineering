@@ -150,6 +150,8 @@ void setup() {
     randomSeed(analogRead(0));
     pixels.begin();
     Serial.begin(9600);
+
+    testRunner();
 }
 
 /*
@@ -256,4 +258,28 @@ int getLocation(int street, int address) {
         location -= 4;
     }
     return location;
+}
+
+bool testPassed = true;
+int numTests = 0;
+
+void testRunner() {
+    Serial.println("Testing started..");
+
+    test("first getLocation should be 0", getLocation(0, 0), 0);
+    test("last getLocation should be 43", getLocation(7, 3), NUMPIXELS - 1);
+
+    char buffer[80];
+    sprintf(buffer, "%i tests. %s", numTests, testPassed ? "PASSED" : "FAILED");
+    Serial.println(buffer);
+}
+
+void test(char description[], int a, int b) {
+    if (a != b) {
+        char buffer[80];
+        sprintf(buffer, "TEST FAILED: %s. (%i != %i)", description, a, b);
+        Serial.println(buffer);
+        testPassed = false;
+    }
+    numTests++;
 }
