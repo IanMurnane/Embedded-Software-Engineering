@@ -12,7 +12,8 @@
 
 Adafruit_NeoPixel pixels = Adafruit_NeoPixel(NUMPIXELS, PIN, NEO_GRB + NEO_KHZ800);
 
-// unsigned long timerA = 0, timerB = 0;
+uint32_t model[NUMPIXELS] = {};
+
 
 class Cloud {
 private:
@@ -40,6 +41,7 @@ public:
         return addresses[id];
     }
 };
+
 
 class Vehicle {
 private:
@@ -140,37 +142,15 @@ public:
     }
 };
 
+
 Cloud cloud;
 Vehicle vehicles[] = {
         Vehicle(0, cloud, 0, 0, 1),
         Vehicle(1, cloud, 4, 0, 1)
 };
 
-void setup() {
-    randomSeed(analogRead(0));
-    pixels.begin();
-    Serial.begin(9600);
-}
 
-/*
-void startTimer() {
-  timerA = micros();
-}
-void stopTimer() {
-  int currentTimer = micros() - timerA;
-  if (currentTimer > timerB) {
-    Serial.println(currentTimer);
-    timerB = currentTimer;
-  }
-}
-*/
-
-uint32_t model[NUMPIXELS] = {};
-void loop() {
-    // clear model
-    for (auto& i : model) i = OFF;
-
-    // add lighting
+void addLightingToModel(Cloud cloud = cloud) {
     int lights[] = { -1, 1, 2 };  // 1 behind, 2 in front
     for (int i = 0; i < NUMVEHICLES; i++) {
         int address = cloud.getAddress(i);
@@ -224,6 +204,37 @@ void loop() {
             model[getLocation(4, 9)] = YELLOW;
         }
     }
+}
+
+
+void setup() {
+    randomSeed(analogRead(0));
+    pixels.begin();
+    Serial.begin(9600);
+
+    testRunner();
+}
+
+/*
+unsigned long timerA = 0, timerB = 0;
+void startTimer() {
+    timerA = micros();
+}
+void stopTimer() {
+    int currentTimer = micros() - timerA;
+    if (currentTimer > timerB) {
+        Serial.println(currentTimer);
+        timerB = currentTimer;
+    }
+}
+*/
+
+void loop() {
+    // clear model
+    for (auto& i : model) i = OFF;
+
+    // add lighting
+    addLightingToModel();
 
     // add vehicles
     for (auto& vehicle : vehicles) {
@@ -256,4 +267,74 @@ int getLocation(int street, int address) {
         location -= 4;
     }
     return location;
+}
+
+bool testPassed = true;
+int numTests = 0;
+
+void testRunner() {
+    Serial.println("Testing started..");
+
+    // getLocation
+    test("first getLocation should be 0", getLocation(0, 0), 0);
+    test("last getLocation should be 43", getLocation(7, 3), NUMPIXELS - 1);
+
+    // cloud
+    Cloud cloud;
+    cloud.update(0, 1, 2);
+    test("cloud getLocationFromId", cloud.getLocationFromId(0), getLocation(1, 2));
+    test("cloud isFree same vehicle skip", cloud.isFree(0, getLocation(1, 2)), true);
+    test("cloud isFree check filled pos", cloud.isFree(1, getLocation(1, 2)), false);
+    test("cloud isFree check empty pos", cloud.isFree(1, getLocation(1, 3)), true);
+    test("cloud getStreet", cloud.getStreet(0), 1);
+    test("cloud getAddress", cloud.getAddress(0), 2);
+
+    // vehicle
+    Vehicle vehicle(0, cloud, 0, 8, 1);
+    test("vehicle location", vehicle.location(), getLocation(0, 8));
+    vehicle.move();
+    test("vehicle move", vehicle.location(), getLocation(0, 9));
+    test("cloud update 1", cloud.getLocationFromId(0), getLocation(0, 9));
+    vehicle.move();
+    test("vehicle u-turn", vehicle.location(), getLocation(4, 0));
+    test("cloud update 2", cloud.getLocationFromId(0), getLocation(4, 0));
+    cloud.update(1, 4, 1);
+    vehicle.move();
+    test("vehicle blocked", vehicle.location(), getLocation(4, 0));
+
+    // lighting
+    cloud.update(0, 0, 0);
+    addLightingToModel(cloud);
+    test("vehicle lighting 1", (int) model[getLocation(0, 1)], (int) YELLOW);
+    test("vehicle lighting 2", (int) model[getLocation(0, 2)], (int) YELLOW);
+    test("vehicle lighting 3", (int) model[getLocation(0, 3)], (int) OFF);
+    cloud.update(0, 0, 3);
+    addLightingToModel(cloud);
+    test("main intersection lighting 1", (int) model[getLocation(1, 0)], (int) YELLOW);
+    test("main intersection lighting 2", (int) model[getLocation(1, 1)], (int) YELLOW);
+    cloud.update(0, 5, 2);
+    addLightingToModel(cloud);
+    test("side street intersection lighting 1", (int) model[getLocation(0, 4)], (int) YELLOW);
+    test("side street intersection lighting 2", (int) model[getLocation(0, 5)], (int) YELLOW);
+    test("side street intersection lighting 3", (int) model[getLocation(0, 6)], (int) YELLOW);
+    test("side street intersection lighting 4", (int) model[getLocation(0, 7)], (int) OFF);
+
+    char buffer[80];
+    sprintf(buffer, "Completed %i tests. %s", numTests, testPassed ? "PASSED" : "FAILED");
+    Serial.println(buffer);
+}
+
+void test(char description[], int a, int b) {
+    if (a != b) {
+        char buffer[80];
+        sprintf(buffer, "TEST FAILED: %s. (%i != %i)", description, a, b);
+        Serial.println(buffer);
+        testPassed = false;
+    }
+    numTests++;
+}
+
+void test(char description[], bool a, bool b) {
+    int aa = a, bb = b;
+    test(description, aa, bb);
 }
